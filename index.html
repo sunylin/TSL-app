@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>台灣手語學習站</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .card.match {
+            transform: scale(1.05) rotate(5deg);
+        }
+        .card.active {
+            box-shadow: 0 0 0 4px #3b82f6;
+        }
+        .card.correct {
+            border: 4px solid #10b981;
+        }
+        .card.incorrect {
+            border: 4px solid #ef4444;
+        }
+        /* 彈出視窗樣式 */
+        #zoom-modal {
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 100;
+        }
+        #zoom-image {
+            max-height: 90vh;
+            max-width: 90vw;
+        }
+        /* 新增的遊戲卡牌翻轉樣式 */
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+        .card.is-flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .card-front {
+            transform: rotateY(180deg);
+            background-color: white; /* 確保詞彙卡片有背景色 */
+            padding: 1rem;
+            text-align: center;
+        }
+        .card-back {
+            background-color: #3b82f6;
+            color: white;
+            font-size: 3rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div id="app" class="bg-white rounded-xl shadow-lg p-6 max-w-4xl w-full">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">台灣手語學習站</h1>
+        <p class="text-lg text-center text-gray-600 mb-8">
+            歡迎來到手語學習站！讓我們從「逛菜市場」這個有趣的主題開始吧！
+        </p>
+
+        <!-- 主選單 -->
+        <div id="main-menu" class="flex flex-col md:flex-row justify-center items-center gap-6">
+            <button onclick="showSection('vocabulary')" class="w-full md:w-auto px-8 py-4 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
+                學習詞彙
+            </button>
+            <button onclick="showSection('matching-game')" class="w-full md:w-auto px-8 py-4 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 transition-all duration-200">
+                卡牌配對遊戲
+            </button>
+            <button onclick="showSection('quiz')" class="w-full md:w-auto px-8 py-4 bg-purple-500 text-white font-semibold rounded-lg shadow-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-200">
+                問答練習
+            </button>
+            <button onclick="showSection('add-vocabulary')" class="w-full md:w-auto px-8 py-4 bg-orange-500 text-white font-semibold rounded-lg shadow-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400 transition-all duration-200">
+                新增詞彙
+            </button>
+        </div>
+
+        <!-- 詞彙學習區塊 -->
+        <div id="vocabulary-section" class="hidden mt-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">詞彙學習：逛菜市場</h2>
+            <div id="vocabulary-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- 詞彙卡片將在此處生成 -->
+            </div>
+            <button onclick="showSection('main-menu')" class="mt-6 w-full py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-all duration-200">
+                回到主選單
+            </button>
+        </div>
+
+        <!-- 配對遊戲區塊 -->
+        <div id="matching-game-section" class="hidden mt-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">卡牌配對遊戲</h2>
+            <div id="game-board" class="grid grid-cols-4 sm:grid-cols-6 gap-4">
+                <!-- 遊戲卡牌將在此處生成 -->
+            </div>
+            <div id="game-message" class="text-center mt-4 font-semibold text-lg"></div>
+            <button onclick="startGame()" class="mt-6 w-full py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-all duration-200">
+                重新洗牌並開始遊戲
+            </button>
+            <button onclick="showSection('main-menu')" class="mt-2 w-full py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-all duration-200">
+                回到主選單
+            </button>
+        </div>
+
+        <!-- 問答練習區塊 -->
+        <div id="quiz-section" class="hidden mt-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">問答練習</h2>
+            <div id="quiz-container" class="flex flex-col items-center">
+                <!-- 問答內容將在此處生成 -->
+            </div>
+            <div id="quiz-result" class="text-center mt-4 font-semibold text-xl"></div>
+            <button onclick="startQuiz()" class="mt-6 w-full py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-all duration-200">
+                重新開始測驗
+            </button>
+            <button onclick="showSection('main-menu')" class="mt-2 w-full py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-all duration-200">
+                回到主選單
+            </button>
+        </div>
+
+        <!-- 新增詞彙區塊 -->
+        <div id="add-vocabulary-section" class="hidden mt-8">
+            <h2 id="add-edit-title" class="text-2xl font-bold text-gray-800 mb-4 text-center">新增手語詞彙</h2>
+            <div class="flex flex-col gap-4">
+                <input type="text" id="new-word" placeholder="詞彙（例如：蘋果）" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <input type="text" id="new-sign" placeholder="手語圖卡檔案名稱（例如：菜市場.jpg）" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <input type="text" id="new-video" placeholder="手語影片檔案名稱（例如：老闆.mp4）（可選填）" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <input type="text" id="new-image" placeholder="情境圖片檔案名稱（例如：菜市場.jpg）" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <textarea id="new-description" placeholder="手勢說明（可選填）" rows="3" class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+            </div>
+            <button onclick="saveNewVocabulary()" id="save-btn" class="mt-4 w-full py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 transition-all duration-200">
+                儲存詞彙
+            </button>
+            <button onclick="resetAddForm()" id="cancel-edit-btn" class="mt-2 w-full py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-all duration-200 hidden">
+                取消編輯
+            </button>
+            <button onclick="showSection('main-menu')" class="mt-2 w-full py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition-all duration-200">
+                回到主選單
+            </button>
+        </div>
+
+
+        <!-- 彈出式訊息視窗 -->
+        <div id="message-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center hidden">
+            <div class="bg-white rounded-lg p-6 max-w-sm w-full text-center">
+                <h3 id="modal-title" class="text-2xl font-bold mb-4"></h3>
+                <p id="modal-content" class="text-lg text-gray-700 mb-6"></p>
+                <button id="modal-ok-btn" class="px-6 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600">確定</button>
+            </div>
+        </div>
+
+        <!-- 新增的放大圖片彈出視窗 -->
+        <div id="zoom-modal" class="fixed inset-0 flex items-center justify-center hidden">
+            <div class="relative">
+                <button onclick="toggleZoom()" class="absolute top-4 right-4 text-white text-4xl font-bold hover:text-gray-300 z-10">&times;</button>
+                <div id="zoom-media-container">
+                    <!-- 圖片或影片將在此處載入 -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 定義手語媒體檔案的基礎網址
+        const baseUrl = 'https://raw.githubusercontent.com/sunylin/signlanguage/main';
+
+        // 輔助函式：取得完整的媒體路徑
+        function getMediaPath(path) {
+            if (!path) return '';
+            if (path.startsWith('http://') || path.startsWith('https://')) {
+                return path;
+            }
+            return `${baseUrl}/${path}`;
+        }
+
+        // 隨機打亂陣列
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // 定義手語詞彙資料
+        // 注意：這裡的 sign, video, image 欄位都改為檔案名稱
+        const vocabularyData = [
+            {
+                word: '菜市場',
+                sign: '菜市場.jpg',
+                video: '',
+                image: '菜市場.png',
+                description: ''
+            },
+            {
+                word: '一星期',
+                sign: '一星期.jpg',
+                video: '',
+                image: '一星期.png',
+                description: ''
+            },
+            {
+                word: '每星期',
+                sign: '每星期.jpg',
+                video: '',
+                image: '每星期.png',
+                description: ''
+            },
+            {
+                word: '唯一',
+                sign: '唯一.jpg',
+                video: '',
+                image: '唯一.png',
+                description: ''
+            },
+            {
+                word: '水果',
+                sign: '水果.jpg',
+                video: '',
+                image: '水果.png',
+                description: ''
+            },
+            {
+                word: '食物',
+                sign: '食物.jpg',
+                video: '',
+                image: '食物.png',
+                description: ''
+            },
+            {
+                word: '買',
+                sign: '買.jpg',
+                video: '',
+                image: '買.png',
+                description: ''
+            },
+            {
+                word: '各式各樣',
+                sign: '各式各樣.jpg',
+                video: '',
+                image: '各式各樣.png',
+                description: ''
+            },
+            {
+                word: '很',
+                sign: '很.jpg',
+                video: '',
+                image: '很.png',
+                description: ''
+            },
+            {
+                word: '三次',
+                sign: '三次.jpg',
+                video: '',
+                image: '三次.png',
+                description: ''
+            },
+            {
+                word: '空',
+                sign: '空.jpg',
+                video: '',
+                image: '空.png',
+                description: ''
+            },
+            {
+                word: '陪去',
+                sign: '陪去.jpg',
+                video: '',
+                image: '陪去.png',
+                description: ''
+            },
+            {
+                word: '星期日',
+                sign: '星期日.jpg',
+                video: '',
+                image: '星期日.png',
+                description: ''
+            },
+            {
+                word: '(三人)去',
+                sign: '(三人)去.jpg',
+                video: '',
+                image: '(三人)去.png',
+                description: ''
+            },
+            {
+                word: '幾次',
+                sign: '幾次.jpg',
+                video: '',
+                image: '幾次.png',
+                description: ''
+            }
+        ];
+
+        let currentSection = 'main-menu';
+        let matchedPairs = 0;
+        let firstCard = null;
+        let secondCard = null;
+        let lockBoard = false;
+        let quizQuestions = [];
+        let currentQuestionIndex = 0;
+        let correctAnswers = 0;
+        let editingWord = null;
+
+        // 顯示指定的區塊
+        function showSection(sectionId) {
+            document.querySelectorAll('#app > div').forEach(section => {
+                if (section.id === `${sectionId}-section`) {
+                    section.classList.remove('hidden');
+                } else if (section.id === 'main-menu') {
+                     if(sectionId === 'main-menu'){
+                        section.classList.remove('hidden');
+                     } else {
+                        section.classList.add('hidden');
+                     }
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+            currentSection = sectionId;
+
+            if (sectionId === 'vocabulary') {
+                renderVocabulary();
+            } else if (sectionId === 'matching-game') {
+                startGame();
+            } else if (sectionId === 'quiz') {
+                startQuiz();
+            }
+        }
+        
+        // 顯示彈出式訊息視窗
+        function showModal(title, content) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-content').innerText = content;
+            document.getElementById('message-modal').classList.remove('hidden');
+        }
+
+        // 隱藏彈出式訊息視窗
+        function hideModal() {
+            document.getElementById('message-modal').classList.add('hidden');
+        }
+
+        document.getElementById('modal-ok-btn').addEventListener('click', hideModal);
+
+        // 渲染詞彙列表
+        function renderVocabulary() {
+            const container = document.getElementById('vocabulary-list');
+            container.innerHTML = '';
+            vocabularyData.forEach(item => {
+                const mediaSource = item.video || item.sign;
+                const mediaTag = item.video 
+                    ? `<video class="w-full h-48 object-cover rounded-lg mb-2" src="${getMediaPath(mediaSource)}" autoplay loop muted onclick="toggleZoom(this.src)"></video>`
+                    : `<img src="${getMediaPath(mediaSource)}" alt="${item.word}手語圖卡" class="w-full h-48 object-cover rounded-lg mb-2" onclick="toggleZoom(this.src)">`;
+                
+                const card = `
+                    <div class="bg-gray-50 rounded-lg p-4 card hover:bg-gray-100 transition-all duration-200">
+                        ${mediaTag}
+                        <h3 class="text-xl font-semibold text-center text-gray-800 mb-1">${item.word}</h3>
+                        <p class="text-sm text-gray-600 text-center">${item.description}</p>
+                        <button onclick="editVocabulary('${item.word}')" class="mt-4 w-full py-1 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400">編輯</button>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+        }
+
+        // 切換放大圖片的顯示
+        function toggleZoom(src) {
+            const zoomModal = document.getElementById('zoom-modal');
+            const zoomMediaContainer = document.getElementById('zoom-media-container');
+
+            if (zoomModal.classList.contains('hidden')) {
+                // 如果視窗是隱藏的，則顯示並載入媒體
+                let mediaElement;
+                if (src.endsWith('.mp4')) {
+                    mediaElement = `<video src="${src}" autoplay loop controls class="rounded-lg shadow-xl" style="max-height: 90vh; max-width: 90vw;" onclick="toggleZoom()"></video>`;
+                } else {
+                    mediaElement = `<img src="${src}" alt="放大圖片" class="rounded-lg shadow-xl" style="max-height: 90vh; max-width: 90vw;" onclick="toggleZoom()">`;
+                }
+                
+                zoomMediaContainer.innerHTML = mediaElement;
+                zoomModal.classList.remove('hidden');
+            } else {
+                // 如果視窗是顯示的，則隱藏
+                zoomModal.classList.add('hidden');
+                zoomMediaContainer.innerHTML = ''; // 清空內容
+            }
+        }
+        
+        // 遊戲核心邏輯
+        function startGame() {
+            const gameBoard = document.getElementById('game-board');
+            const gameMessage = document.getElementById('game-message');
+            gameBoard.innerHTML = '';
+            gameMessage.innerText = '點擊卡牌來開始配對吧！';
+            matchedPairs = 0;
+            firstCard = null;
+            secondCard = null;
+            lockBoard = false;
+
+            // 準備卡牌，每一組詞彙都包含一張手語圖卡和一張中文詞彙卡
+            const gameCards = [];
+            vocabularyData.forEach(item => {
+                // 創建手語圖卡
+                const mediaSource = item.video || item.sign;
+                const mediaElement = item.video 
+                    ? `<video class="w-full h-full object-cover rounded-lg" src="${getMediaPath(mediaSource)}" autoplay loop muted onclick="toggleZoom(this.src)"></video>`
+                    : `<img src="${getMediaPath(mediaSource)}" alt="${item.word}手語圖卡" class="w-full h-full object-cover rounded-lg" onclick="toggleZoom(this.src)">`;
+
+                gameCards.push({ word: item.word, content: mediaElement, type: 'sign' });
+                
+                // 創建中文詞彙卡
+                const wordElement = `<span class="text-3xl font-bold text-gray-800">${item.word}</span>`;
+                gameCards.push({ word: item.word, content: wordElement, type: 'word' });
+            });
+            
+            const shuffledCards = shuffleArray(gameCards);
+
+            shuffledCards.forEach((cardData, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card', 'bg-white', 'rounded-lg', 'shadow-md', 'p-2', 'flex', 'items-center', 'justify-center', 'aspect-square');
+                card.dataset.word = cardData.word;
+                card.dataset.type = cardData.type;
+
+                // 卡牌內部結構
+                card.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-back">?</div>
+                        <div class="card-front">
+                            ${cardData.content}
+                        </div>
+                    </div>
+                `;
+
+                card.addEventListener('click', flipCard);
+                gameBoard.appendChild(card);
+            });
+        }
+
+        function flipCard(event) {
+            if (lockBoard) return;
+            const clickedCard = event.currentTarget;
+            if (clickedCard === firstCard) return;
+
+            clickedCard.classList.add('is-flipped');
+
+            if (!firstCard) {
+                firstCard = clickedCard;
+                return;
+            }
+
+            secondCard = clickedCard;
+            lockBoard = true;
+            checkForMatch();
+        }
+
+        function checkForMatch() {
+            const isMatch = firstCard.dataset.word === secondCard.dataset.word;
+
+            if (isMatch) {
+                disableCards();
+                matchedPairs++;
+                if (matchedPairs === vocabularyData.length) {
+                    showModal('恭喜你！', '你成功配對了所有卡牌！');
+                }
+            } else {
+                unflipCards();
+            }
+        }
+
+        function disableCards() {
+            firstCard.removeEventListener('click', flipCard);
+            secondCard.removeEventListener('click', flipCard);
+
+            firstCard.classList.add('correct');
+            secondCard.classList.add('correct');
+
+            resetBoard();
+        }
+
+        function unflipCards() {
+            setTimeout(() => {
+                firstCard.classList.remove('is-flipped');
+                secondCard.classList.remove('is-flipped');
+                firstCard.classList.add('incorrect');
+                secondCard.classList.add('incorrect');
+                setTimeout(() => {
+                    firstCard.classList.remove('incorrect');
+                    secondCard.classList.remove('incorrect');
+                    resetBoard();
+                }, 500);
+            }, 1000);
+        }
+
+        function resetBoard() {
+            [firstCard, secondCard, lockBoard] = [null, null, false];
+        }
+
+        // 問答練習核心邏輯
+        function startQuiz() {
+            const container = document.getElementById('quiz-container');
+            const result = document.getElementById('quiz-result');
+            container.innerHTML = '';
+            result.innerText = '';
+            currentQuestionIndex = 0;
+            correctAnswers = 0;
+            
+            // 隨機產生測驗題目
+            const wordsForQuiz = shuffleArray(vocabularyData).slice(0, 5); // 隨機取5個詞彙
+            quizQuestions = wordsForQuiz.map(item => {
+                const choices = shuffleArray([
+                    item.word,
+                    ...shuffleArray(vocabularyData.filter(v => v.word !== item.word)).map(v => v.word).slice(0, 3)
+                ]);
+                return {
+                    question: `這個手語代表什麼？`,
+                    sign: item.sign,
+                    video: item.video,
+                    correctAnswer: item.word,
+                    choices: choices
+                };
+            });
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const container = document.getElementById('quiz-container');
+            const result = document.getElementById('quiz-result');
+            if (currentQuestionIndex >= quizQuestions.length) {
+                showQuizResult();
+                return;
+            }
+
+            const question = quizQuestions[currentQuestionIndex];
+            const mediaSource = question.video || question.sign;
+            const mediaElement = question.video 
+                ? `<video class="w-64 h-48 object-cover rounded-lg mb-4 cursor-pointer" src="${getMediaPath(mediaSource)}" autoplay loop muted onclick="toggleZoom(this.src)"></video>`
+                : `<img src="${getMediaPath(mediaSource)}" alt="手語圖卡" class="w-64 h-48 object-cover rounded-lg mb-4 cursor-pointer" onclick="toggleZoom(this.src)">`;
+
+            container.innerHTML = `
+                ${mediaElement}
+                <p class="text-xl font-semibold mb-4">${question.question}</p>
+                <div class="grid grid-cols-2 gap-4 w-full max-w-sm">
+                    ${question.choices.map(choice => `
+                        <button onclick="checkAnswer('${choice}')" class="px-4 py-2 bg-gray-200 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200">${choice}</button>
+                    `).join('')}
+                </div>
+            `;
+            result.innerText = '';
+        }
+
+        function checkAnswer(selectedChoice) {
+            const question = quizQuestions[currentQuestionIndex];
+            const buttons = document.querySelectorAll('#quiz-container button');
+            buttons.forEach(button => button.disabled = true);
+
+            if (selectedChoice === question.correctAnswer) {
+                correctAnswers++;
+                document.getElementById('quiz-result').innerText = '答對了！';
+                document.getElementById('quiz-result').classList.remove('text-red-500');
+                document.getElementById('quiz-result').classList.add('text-green-500');
+            } else {
+                document.getElementById('quiz-result').innerText = `答錯了！正確答案是：${question.correctAnswer}`;
+                document.getElementById('quiz-result').classList.remove('text-green-500');
+                document.getElementById('quiz-result').classList.add('text-red-500');
+            }
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                renderQuestion();
+            }, 1500);
+        }
+
+        function showQuizResult() {
+            showModal('測驗結束！', `你的得分是 ${correctAnswers} / ${quizQuestions.length}。`);
+            document.getElementById('quiz-container').innerHTML = '';
+        }
+
+        // 編輯詞彙功能
+        function editVocabulary(word) {
+            const item = vocabularyData.find(v => v.word === word);
+            if (item) {
+                editingWord = word;
+                document.getElementById('new-word').value = item.word;
+                document.getElementById('new-word').disabled = true; // 不允許修改詞彙本身
+                document.getElementById('new-sign').value = item.sign;
+                document.getElementById('new-video').value = item.video;
+                document.getElementById('new-image').value = item.image;
+                document.getElementById('new-description').value = item.description;
+
+                document.getElementById('add-edit-title').innerText = '編輯手語詞彙';
+                document.getElementById('save-btn').innerText = '更新詞彙';
+                document.getElementById('cancel-edit-btn').classList.remove('hidden');
+
+                showSection('add-vocabulary');
+            }
+        }
+
+        // 取消編輯，回到新增模式
+        function resetAddForm() {
+            editingWord = null;
+            document.getElementById('new-word').value = '';
+            document.getElementById('new-word').disabled = false;
+            document.getElementById('new-sign').value = '';
+            document.getElementById('new-video').value = '';
+            document.getElementById('new-image').value = '';
+            document.getElementById('new-description').value = '';
+
+            document.getElementById('add-edit-title').innerText = '新增手語詞彙';
+            document.getElementById('save-btn').innerText = '儲存詞彙';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+        }
+
+        // 新增/儲存詞彙功能
+        function saveNewVocabulary() {
+            const newWord = document.getElementById('new-word').value.trim();
+            const newSign = document.getElementById('new-sign').value.trim();
+            const newVideo = document.getElementById('new-video').value.trim();
+            const newImage = document.getElementById('new-image').value.trim();
+            const newDescription = document.getElementById('new-description').value.trim();
+
+            if (!newWord || (!newSign && !newVideo) || !newImage) {
+                showModal('錯誤', '請填寫所有必要欄位（詞彙、手語圖卡或影片、情境圖片）！');
+                return;
+            }
+
+            if (editingWord) {
+                // 更新現有詞彙
+                const itemIndex = vocabularyData.findIndex(v => v.word === editingWord);
+                if (itemIndex !== -1) {
+                    vocabularyData[itemIndex].sign = newSign;
+                    vocabularyData[itemIndex].video = newVideo;
+                    vocabularyData[itemIndex].image = newImage;
+                    vocabularyData[itemIndex].description = newDescription;
+                    showModal('更新成功', `${editingWord} 已成功更新！`);
+                }
+            } else {
+                // 新增詞彙
+                const newVocabulary = {
+                    word: newWord,
+                    sign: newSign,
+                    video: newVideo,
+                    image: newImage,
+                    description: newDescription
+                };
+                vocabularyData.push(newVocabulary);
+                showModal('新增成功', `${newWord} 已成功新增到詞彙庫！`);
+            }
+            
+            resetAddForm();
+            showSection('main-menu');
+        }
+
+        // 頁面載入時預設顯示主選單
+        window.onload = () => {
+             showSection('main-menu');
+        }
+
+    </script>
+</body>
+</html>
