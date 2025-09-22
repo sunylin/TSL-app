@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手語配對遊戲</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .game-card {
+            width: 120px;
+            height: 160px;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .game-card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-face.front {
+            background-color: #fff;
+            color: #333;
+            transform: rotateY(180deg);
+            padding: 10px;
+        }
+        .card-face.back {
+            background-color: #4c51bf;
+            color: white;
+            font-size: 3rem;
+        }
+        .card-face.back .sign-icon {
+            font-family: "Font Awesome 6 Pro";
+        }
+        .matched {
+            background-color: #d1fae5;
+            box-shadow: 0 0 0 4px #10b981;
+        }
+
+        /* Styles for the new zoom functionality */
+        .zoom-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .zoom-overlay.active {
+            display: flex;
+        }
+        .zoomed-card-content {
+            padding: 0; /* Remove padding */
+            border-radius: 16px;
+            max-width: 80%;
+            max-height: 80%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .zoomed-card-content img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-4xl w-full">
+        <h1 class="text-4xl font-bold text-center text-blue-800 mb-2">手語配對遊戲</h1>
+        <p id="game-status" class="text-center text-gray-600 mb-6">請上傳圖片以開始遊戲。</p>
+
+        <div class="flex justify-between items-center mb-6">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl font-medium text-gray-700">配對成功：</span>
+                <span id="score" class="text-2xl font-bold text-green-600">0</span>
+            </div>
+            <button id="start-reset-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full shadow-lg transition-transform transform hover:scale-105">開始遊戲</button>
+        </div>
+
+        <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center mb-6">
+            <label for="image-upload" class="cursor-pointer">
+                <p class="text-gray-500">點擊此處或拖曳圖片檔案以上傳</p>
+                <input type="file" id="image-upload" class="hidden" accept="image/*" multiple>
+            </label>
+            <p id="file-count" class="text-sm text-gray-400 mt-2">已選擇 0 個檔案</p>
+        </div>
+
+        <!-- 移除固定的網格類別，改為由 JavaScript 動態控制 -->
+        <div id="game-board" class="gap-4 justify-center">
+            <!-- Cards will be dynamically added here -->
+        </div>
+    </div>
+    
+    <!-- Zoom Overlay -->
+    <div id="zoom-overlay" class="zoom-overlay">
+        <div id="zoomed-card-content" class="zoomed-card-content"></div>
+    </div>
+
+    <script>
+        // Use a self-invoking anonymous function to encapsulate the game logic
+        (function() {
+            const gameBoard = document.getElementById('game-board');
+            const scoreElement = document.getElementById('score');
+            const startResetButton = document.getElementById('start-reset-button');
+            const imageUploadInput = document.getElementById('image-upload');
+            const fileCountElement = document.getElementById('file-count');
+            const gameStatusElement = document.getElementById('game-status');
+            const zoomOverlay = document.getElementById('zoom-overlay');
+            const zoomedCardContent = document.getElementById('zoomed-card-content');
+            
+            let cards = [];
+            let flippedCards = [];
+            let canFlip = true;
+            let matchesFound = 0;
+            let totalMatches = 0;
+            let uploadedImageFiles = [];
+            let tempCard = null; // 新增的暫存變數
+
+            /**
+             * Shuffles an array randomly using the Fisher-Yates algorithm.
+             * @param {Array} array - The array to shuffle.
+             * @returns {Array} The shuffled array.
+             */
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+
+            /**
+             * Creates and returns a single card element.
+             * @param {Object} cardData - The data for the card.
+             * @returns {HTMLElement} The created card element.
+             */
+            function createCardElement(cardData) {
+                const card = document.createElement('div');
+                card.classList.add('game-card', 'rounded-2xl', 'p-2');
+                card.dataset.id = cardData.id;
+                card.dataset.type = cardData.type;
+                card.dataset.word = cardData.word;
+
+                const cardInner = document.createElement('div');
+                cardInner.classList.add('card-inner', 'rounded-2xl');
+                
+                // Back of the card (the hidden side)
+                const cardBack = document.createElement('div');
+                cardBack.classList.add('card-face', 'back');
+                
+                // 用圖片取代原本的文字，並使用新的 GitHub 網址
+                const backImage = document.createElement('img');
+                backImage.src = 'https://raw.githubusercontent.com/sunylin/signlanguage/main/Card.png';
+                backImage.alt = '卡片背面圖案';
+                backImage.classList.add('w-full', 'h-full', 'object-cover', 'rounded-2xl');
+                cardBack.appendChild(backImage);
+                
+                // Front of the card (the revealed side)
+                const cardFront = document.createElement('div');
+                cardFront.classList.add('card-face', 'front', 'rounded-2xl', 'flex-col');
+                
+                if (cardData.type === 'image') {
+                    // This is the sign language image card
+                    const img = document.createElement('img');
+                    img.src = cardData.content;
+                    img.alt = `手語圖片：${cardData.word}`;
+                    img.classList.add('w-24', 'h-24', 'rounded-lg', 'object-contain');
+                    cardFront.appendChild(img);
+                } else {
+                    // This is the Chinese word card
+                    const wordText = document.createElement('span');
+                    wordText.classList.add('text-lg', 'font-semibold', 'text-center');
+                    wordText.textContent = cardData.content;
+                    cardFront.appendChild(wordText);
+                }
+                
+                cardInner.appendChild(cardBack);
+                cardInner.appendChild(cardFront);
+                card.appendChild(cardInner);
+
+                card.addEventListener('click', () => handleCardClick(card));
+                return card;
+            }
+
+            /**
+             * Handles the logic for a card click, including zoom and flip.
+             * @param {HTMLElement} card - The card element that was clicked.
+             */
+            function handleCardClick(card) {
+                if (!canFlip || card.classList.contains('flipped') || card.classList.contains('matched')) {
+                    return;
+                }
+
+                const cardData = cards.find(c => c.id == parseInt(card.dataset.id));
+
+                if (cardData.type === 'image') {
+                    // Show the zoomed-in card content for images only
+                    zoomedCardContent.innerHTML = '';
+                    const img = document.createElement('img');
+                    img.src = cardData.content;
+                    img.alt = cardData.word;
+                    zoomedCardContent.appendChild(img);
+                    zoomOverlay.classList.add('active');
+                    canFlip = false; // Prevent any other clicks
+                    tempCard = card; // 暫存此卡片
+                } else {
+                    // For text cards, directly flip without zooming
+                    card.classList.add('flipped');
+                    flippedCards.push(card);
+                    if (flippedCards.length === 2) {
+                        canFlip = false;
+                        checkMatch();
+                    }
+                }
+            }
+            
+            /**
+             * Handles the logic for flipping the cards after the user clicks to zoom out.
+             */
+            function handleFlipAfterZoom() {
+                zoomOverlay.classList.remove('active');
+                zoomedCardContent.innerHTML = '';
+                
+                if (tempCard) {
+                    tempCard.classList.add('flipped');
+                    flippedCards.push(tempCard);
+                    tempCard = null;
+                }
+                
+                if (flippedCards.length === 2) {
+                    canFlip = false;
+                    checkMatch();
+                } else {
+                    canFlip = true;
+                }
+            }
+
+            /**
+             * Checks if the two flipped cards are a match.
+             */
+            function checkMatch() {
+                const [card1, card2] = flippedCards;
+                // Matching logic: compare the 'word' data attribute and ensure types are different
+                const isMatch = card1.dataset.word === card2.dataset.word && card1.dataset.type !== card2.dataset.type;
+
+                if (isMatch) {
+                    card1.classList.add('matched');
+                    card2.classList.add('matched');
+                    matchesFound++;
+                    scoreElement.textContent = matchesFound;
+
+                    flippedCards = [];
+                    canFlip = true; // FIX: Reset canFlip for a new turn
+
+                    if (matchesFound === totalMatches) {
+                        setTimeout(() => showCompletionMessage(), 500);
+                    }
+                } else {
+                    setTimeout(() => {
+                        card1.classList.remove('flipped');
+                        card2.classList.remove('flipped');
+                        flippedCards = [];
+                        // CORRECTED: Ensure canFlip is reset to true after a failed match
+                        canFlip = true; 
+                    }, 1000);
+                }
+            }
+            
+            /**
+             * Displays a completion message when the game is over.
+             */
+            function showCompletionMessage() {
+                const message = document.createElement('div');
+                message.classList.add('fixed', 'inset-0', 'bg-black', 'bg-opacity-50', 'flex', 'items-center', 'justify-center', 'z-50');
+                message.innerHTML = `
+                    <div class="bg-white p-10 rounded-xl shadow-2xl text-center">
+                        <h2 class="text-3xl font-bold text-green-600 mb-4">恭喜！</h2>
+                        <p class="text-xl text-gray-800">您已經完成所有配對！</p>
+                        <button onclick="window.location.reload()" class="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full">再玩一次</button>
+                    </div>
+                `;
+                document.body.appendChild(message);
+            }
+
+            /**
+             * Initializes the game by creating and shuffling cards, then rendering them.
+             */
+            function initializeGame() {
+                gameBoard.innerHTML = '';
+                cards = [];
+                flippedCards = [];
+                matchesFound = 0;
+                canFlip = true;
+                scoreElement.textContent = '0';
+
+                // Get words from uploaded filenames
+                const vocabList = uploadedImageFiles.map(file => {
+                    const fileName = file.name;
+                    const dotIndex = fileName.lastIndexOf('.');
+                    return dotIndex !== -1 ? fileName.substring(0, dotIndex) : fileName;
+                });
+
+                if (vocabList.length === 0) {
+                    gameStatusElement.textContent = "請至少上傳一個圖片檔案以開始遊戲。";
+                    startResetButton.textContent = "開始遊戲";
+                    return;
+                }
+                
+                totalMatches = vocabList.length;
+                startResetButton.textContent = "重新開始";
+                gameStatusElement.textContent = "點擊卡片來配對中文詞彙與手語圖片。";
+
+                const cardCount = totalMatches * 2;
+                
+                // 動態決定欄位數以確保卡片能排成完整的矩陣
+                let columns = 4; // 預設 4 欄
+                const preferredColumns = [6, 5, 4, 3, 2];
+                for (const numCols of preferredColumns) {
+                    if (cardCount % numCols === 0) {
+                        columns = numCols;
+                        break;
+                    }
+                }
+
+                // 設定遊戲板的網格樣式
+                gameBoard.style.display = 'grid';
+                gameBoard.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+                let idCounter = 0;
+                vocabList.forEach((word, index) => {
+                    const fileUrl = URL.createObjectURL(uploadedImageFiles[index]);
+                    
+                    // Create a text card for the Chinese word
+                    cards.push({
+                        id: idCounter++,
+                        word: word,
+                        type: 'text',
+                        content: word
+                    });
+                    
+                    // Create an image card for the sign language image
+                    cards.push({
+                        id: idCounter++,
+                        word: word,
+                        type: 'image',
+                        content: fileUrl
+                    });
+                });
+
+                // Shuffle the cards and render them to the board
+                shuffleArray(cards).forEach(cardData => {
+                    gameBoard.appendChild(createCardElement(cardData));
+                });
+            }
+
+            // Event listener for the start/reset button
+            startResetButton.addEventListener('click', initializeGame);
+
+            // Event listener for file upload
+            imageUploadInput.addEventListener('change', (event) => {
+                uploadedImageFiles = Array.from(event.target.files);
+                fileCountElement.textContent = `已選擇 ${uploadedImageFiles.length} 個檔案`;
+            });
+            
+            // Drag and drop listeners
+            document.body.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            document.body.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.files.length > 0) {
+                    imageUploadInput.files = e.dataTransfer.files;
+                    uploadedImageFiles = Array.from(e.dataTransfer.files);
+                    fileCountElement.textContent = `已選擇 ${uploadedImageFiles.length} 個檔案`;
+                }
+            });
+            
+            // Event listener for the zoom overlay to close
+            zoomOverlay.addEventListener('click', handleFlipAfterZoom);
+
+        })();
+    </script>
+</body>
+</html>
